@@ -11,9 +11,6 @@ pub struct InputData {
     pub disabled: Option<bool>,
     ///ID of the template to be updated.
     pub id: String,
-    ///Message language.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub lang: Option<crate::types::string::Language>,
     ///Name of the template.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
@@ -28,19 +25,9 @@ pub type Input = crate::types::Object<InputData>;
 pub type Output = crate::tools::ozone::communication::defs::TemplateView;
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(tag = "error", content = "message")]
-pub enum Error {
-    DuplicateTemplateName(Option<String>),
-}
+pub enum Error {}
 impl std::fmt::Display for Error {
     fn fmt(&self, _f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Error::DuplicateTemplateName(msg) => {
-                write!(_f, "DuplicateTemplateName")?;
-                if let Some(msg) = msg {
-                    write!(_f, ": {msg}")?;
-                }
-            }
-        }
         Ok(())
     }
 }

@@ -30,7 +30,5 @@ impl std::fmt::Display for Error {
 pub struct AppPasswordData {
     pub created_at: crate::types::string::Datetime,
     pub name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub privileged: Option<bool>,
 }
 pub type AppPassword = crate::types::Object<AppPasswordData>;

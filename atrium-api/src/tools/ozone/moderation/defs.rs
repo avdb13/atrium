@@ -143,9 +143,6 @@ pub type ModEventTag = crate::types::Object<ModEventTagData>;
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ModEventTakedownData {
-    ///If true, all other reports on content authored by this account will be resolved (acknowledged).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub acknowledge_account_subjects: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub comment: Option<String>,
     ///Indicates how long the takedown should be in effect before automatically expiring.
@@ -246,8 +243,6 @@ pub type RecordViewNotFound = crate::types::Object<RecordViewNotFoundData>;
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct RepoViewData {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub deactivated_at: Option<crate::types::string::Datetime>,
     pub did: crate::types::string::Did,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
@@ -266,8 +261,6 @@ pub type RepoView = crate::types::Object<RepoViewData>;
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct RepoViewDetailData {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub deactivated_at: Option<crate::types::string::Datetime>,
     pub did: crate::types::string::Did,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
@@ -392,8 +385,6 @@ pub enum ModEventViewDetailEventRefs {
     ModEventResolveAppeal(Box<ModEventResolveAppeal>),
     #[serde(rename = "tools.ozone.moderation.defs#modEventDivert")]
     ModEventDivert(Box<ModEventDivert>),
-    #[serde(rename = "tools.ozone.moderation.defs#modEventTag")]
-    ModEventTag(Box<ModEventTag>),
 }
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(tag = "$type")]
@@ -438,8 +429,6 @@ pub enum ModEventViewEventRefs {
     ModEventResolveAppeal(Box<ModEventResolveAppeal>),
     #[serde(rename = "tools.ozone.moderation.defs#modEventDivert")]
     ModEventDivert(Box<ModEventDivert>),
-    #[serde(rename = "tools.ozone.moderation.defs#modEventTag")]
-    ModEventTag(Box<ModEventTag>),
 }
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(tag = "$type")]

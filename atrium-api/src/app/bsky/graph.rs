@@ -57,9 +57,3 @@ impl crate::types::Collection for Listitem {
     const NSID: &'static str = "app.bsky.graph.listitem";
     type Record = listitem::Record;
 }
-#[derive(Debug)]
-pub struct Starterpack;
-impl crate::types::Collection for Starterpack {
-    const NSID: &'static str = "app.bsky.graph.starterpack";
-    type Record = starterpack::Record;
-}

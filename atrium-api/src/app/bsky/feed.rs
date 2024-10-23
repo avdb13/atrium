@@ -44,12 +44,6 @@ impl crate::types::Collection for Post {
     type Record = post::Record;
 }
 #[derive(Debug)]
-pub struct Postgate;
-impl crate::types::Collection for Postgate {
-    const NSID: &'static str = "app.bsky.feed.postgate";
-    type Record = postgate::Record;
-}
-#[derive(Debug)]
 pub struct Repost;
 impl crate::types::Collection for Repost {
     const NSID: &'static str = "app.bsky.feed.repost";

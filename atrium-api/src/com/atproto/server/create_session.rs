@@ -15,8 +15,6 @@ pub type Input = crate::types::Object<InputData>;
 #[serde(rename_all = "camelCase")]
 pub struct OutputData {
     pub access_jwt: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub active: Option<bool>,
     pub did: crate::types::string::Did,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub did_doc: Option<crate::types::Unknown>,
@@ -28,9 +26,6 @@ pub struct OutputData {
     pub email_confirmed: Option<bool>,
     pub handle: crate::types::string::Handle,
     pub refresh_jwt: String,
-    ///If active=false, this optional field indicates a possible reason for why the account is not active. If active=false and no status is supplied, then the host makes no claim for why the repository is no longer being hosted.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub status: Option<String>,
 }
 pub type Output = crate::types::Object<OutputData>;
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]

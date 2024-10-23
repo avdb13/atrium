@@ -9,8 +9,6 @@ pub struct ParametersData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<crate::types::LimitedNonZeroU8<100u8>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub priority: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub seen_at: Option<crate::types::string::Datetime>,
 }
 pub type Parameters = crate::types::Object<ParametersData>;
@@ -20,8 +18,6 @@ pub struct OutputData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cursor: Option<String>,
     pub notifications: Vec<Notification>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub priority: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub seen_at: Option<crate::types::string::Datetime>,
 }
@@ -43,7 +39,7 @@ pub struct NotificationData {
     pub is_read: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub labels: Option<Vec<crate::com::atproto::label::defs::Label>>,
-    ///Expected values are 'like', 'repost', 'follow', 'mention', 'reply', 'quote', and 'starterpack-joined'.
+    ///Expected values are 'like', 'repost', 'follow', 'mention', 'reply', and 'quote'.
     pub reason: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason_subject: Option<String>,

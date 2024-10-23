@@ -6,27 +6,6 @@ pub struct AdultContentPrefData {
     pub enabled: bool,
 }
 pub type AdultContentPref = crate::types::Object<AdultContentPrefData>;
-///If set, an active progress guide. Once completed, can be set to undefined. Should have unspecced fields tracking progress.
-#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct BskyAppProgressGuideData {
-    pub guide: String,
-}
-pub type BskyAppProgressGuide = crate::types::Object<BskyAppProgressGuideData>;
-///A grab bag of state that's specific to the bsky.app program. Third-party apps shouldn't use this.
-#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct BskyAppStatePrefData {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub active_progress_guide: Option<BskyAppProgressGuide>,
-    ///Storage for NUXs the user has encountered.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub nuxs: Option<Vec<crate::app::bsky::actor::defs::Nux>>,
-    ///An array of tokens which identify nudges (modals, popups, tours, highlight dots) that should be shown to the user.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub queued_nudges: Option<Vec<String>>,
-}
-pub type BskyAppStatePref = crate::types::Object<BskyAppStatePrefData>;
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ContentLabelPrefData {
@@ -73,14 +52,6 @@ pub struct InterestsPrefData {
     pub tags: Vec<String>,
 }
 pub type InterestsPref = crate::types::Object<InterestsPrefData>;
-///The subject's followers whom you also follow
-#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct KnownFollowersData {
-    pub count: i64,
-    pub followers: Vec<ProfileViewBasic>,
-}
-pub type KnownFollowers = crate::types::Object<KnownFollowersData>;
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct LabelerPrefItemData {
@@ -97,14 +68,6 @@ pub type LabelersPref = crate::types::Object<LabelersPrefData>;
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct MutedWordData {
-    ///Groups of users to apply the muted word to. If undefined, applies to all users.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub actor_target: Option<String>,
-    ///The date and time at which the muted word will expire and no longer be applied.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub expires_at: Option<crate::types::string::Datetime>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub id: Option<String>,
     ///The intended targets of the muted word.
     pub targets: Vec<crate::app::bsky::actor::defs::MutedWordTarget>,
     ///The muted word itself.
@@ -119,20 +82,6 @@ pub struct MutedWordsPrefData {
     pub items: Vec<crate::app::bsky::actor::defs::MutedWord>,
 }
 pub type MutedWordsPref = crate::types::Object<MutedWordsPrefData>;
-///A new user experiences (NUX) storage object
-#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct NuxData {
-    pub completed: bool,
-    ///Arbitrary data for the NUX. The structure is defined by the NUX itself. Limited to 300 characters.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub data: Option<String>,
-    ///The date and time at which the NUX will expire and should be considered completed.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub expires_at: Option<crate::types::string::Datetime>,
-    pub id: String,
-}
-pub type Nux = crate::types::Object<NuxData>;
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PersonalDetailsPrefData {
@@ -153,8 +102,6 @@ pub struct ProfileAssociatedData {
     pub labeler: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lists: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub starter_packs: Option<i64>,
 }
 pub type ProfileAssociated = crate::types::Object<ProfileAssociatedData>;
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -170,8 +117,6 @@ pub struct ProfileViewData {
     pub associated: Option<ProfileAssociated>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub avatar: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub created_at: Option<crate::types::string::Datetime>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub did: crate::types::string::Did,
@@ -193,8 +138,6 @@ pub struct ProfileViewBasicData {
     pub associated: Option<ProfileAssociated>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub avatar: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub created_at: Option<crate::types::string::Datetime>,
     pub did: crate::types::string::Did,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
@@ -215,8 +158,6 @@ pub struct ProfileViewDetailedData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub banner: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub created_at: Option<crate::types::string::Datetime>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub did: crate::types::string::Did,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -228,10 +169,6 @@ pub struct ProfileViewDetailedData {
     pub handle: crate::types::string::Handle,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub indexed_at: Option<crate::types::string::Datetime>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub joined_via_starter_pack: Option<
-        crate::app::bsky::graph::defs::StarterPackViewBasic,
-    >,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub labels: Option<Vec<crate::com::atproto::label::defs::Label>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -290,8 +227,6 @@ pub struct ViewerStateData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub following: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub known_followers: Option<KnownFollowers>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub muted: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub muted_by_list: Option<crate::app::bsky::graph::defs::ListViewBasic>,
@@ -320,8 +255,4 @@ pub enum PreferencesItem {
     MutedWordsPref(Box<MutedWordsPref>),
     #[serde(rename = "app.bsky.actor.defs#hiddenPostsPref")]
     HiddenPostsPref(Box<HiddenPostsPref>),
-    #[serde(rename = "app.bsky.actor.defs#bskyAppStatePref")]
-    BskyAppStatePref(Box<BskyAppStatePref>),
-    #[serde(rename = "app.bsky.actor.defs#labelersPref")]
-    LabelersPref(Box<LabelersPref>),
 }
