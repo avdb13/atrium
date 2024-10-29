@@ -1,5 +1,6 @@
 pub mod memory;
 pub mod state;
+pub mod cached;
 
 use std::error::Error;
 use std::future::Future;
