@@ -1,9 +1,11 @@
 use crate::constants::FALLBACK_ALG;
 use crate::error::{Error, Result};
 use crate::keyset::Keyset;
+use crate::oauth_session::OAuthSession;
 use crate::resolver::{OAuthResolver, OAuthResolverConfig};
-use crate::server_agent::{OAuthRequest, OAuthServerAgent};
-use crate::store::session::SessionStore;
+use crate::server_agent::{OAuthRequest, OAuthServerAgent, OAuthServerFactory};
+use crate::store::cached::Cached;
+use crate::store::session::{Session, SessionStore};
 use crate::store::state::{InternalStateData, StateStore};
 use crate::types::{
     AuthorizationCodeChallengeMethod, AuthorizationResponseType, AuthorizeOptions, CallbackParams,
@@ -12,6 +14,7 @@ use crate::types::{
     TryIntoOAuthClientMetadata,
 };
 use crate::utils::{compare_algos, generate_key, generate_nonce, get_random_values};
+use atrium_api::types::string::Did;
 use atrium_identity::{did::DidResolver, handle::HandleResolver, Resolver};
 use atrium_xrpc::HttpClient;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -64,9 +67,10 @@ where
     pub client_metadata: OAuthClientMetadata,
     keyset: Option<Keyset>,
     resolver: Arc<OAuthResolver<T, D, H>>,
+    server_factory: OAuthServerFactory<D, H, T>,
     state_store: S,
     session_store: N,
-    http_client: Arc<T>,
+    _http_client: Arc<T>,
 }
 
 #[cfg(not(feature = "default-client"))]
@@ -79,6 +83,7 @@ where
     pub client_metadata: OAuthClientMetadata,
     keyset: Option<Keyset>,
     resolver: Arc<OAuthResolver<T, D, H>>,
+    server_factory: OAuthServerFactory<D, H, T>,
     state_store: S,
     session_store: N,
     http_client: Arc<T>,
@@ -97,13 +102,15 @@ where
         let keyset = if let Some(keys) = config.keys { Some(keys.try_into()?) } else { None };
         let client_metadata = config.client_metadata.try_into_client_metadata(&keyset)?;
         let http_client = Arc::new(crate::http_client::default::DefaultHttpClient::default());
+        let resolver = Arc::new(OAuthResolver::new(config.resolver, http_client.clone()));
         Ok(Self {
-            client_metadata,
-            keyset,
-            resolver: Arc::new(OAuthResolver::new(config.resolver, http_client.clone())),
+            client_metadata: client_metadata.clone(),
+            keyset: keyset.clone(),
+            resolver: resolver.clone(),
+            server_factory: OAuthServerFactory::new(resolver, client_metadata, keyset),
             state_store: config.state_store,
             session_store: config.session_store,
-            http_client,
+            _http_client: http_client,
         })
     }
 }
@@ -185,14 +192,8 @@ where
             prompt: options.prompt.map(String::from),
         };
         if metadata.pushed_authorization_request_endpoint.is_some() {
-            let server = OAuthServerAgent::new(
-                dpop_key,
-                metadata.clone(),
-                self.client_metadata.clone(),
-                self.resolver.clone(),
-                self.http_client.clone(),
-                self.keyset.clone(),
-            )?;
+            let server =
+                self.server_factory.from_issuer(&metadata.issuer, dpop_key.clone()).await?;
             let par_response = server
                 .request::<OAuthPusehedAuthorizationRequestResponse>(
                     OAuthRequest::PushedAuthorizationRequest(parameters),
@@ -244,17 +245,28 @@ where
         } else if metadata.authorization_response_iss_parameter_supported == Some(true) {
             return Err(Error::Callback("missing `iss` parameter".into()));
         }
-        let server = OAuthServerAgent::new(
-            state.dpop_key.clone(),
-            metadata.clone(),
-            self.client_metadata.clone(),
-            self.resolver.clone(),
-            self.http_client.clone(),
-            self.keyset.clone(),
-        )?;
+        let server =
+            self.server_factory.from_issuer(&metadata.issuer, state.dpop_key.clone()).await?;
         let token_set = server.exchange_code(&params.code, &state.verifier).await?;
 
-        // TODO: create session?
+        let sub: Did = token_set.sub.parse().unwrap();
+
+        if let Err(_error) = self
+            .session_store
+            .set(sub.clone(), Cached::new(Session::new(state.dpop_key.clone(), token_set.clone())))
+            .await
+        {
+            let _ = server
+                .revoke(
+                    token_set.refresh_token.as_deref().unwrap_or_else(|| &token_set.access_token),
+                )
+                .await;
+
+            todo!();
+            // return Err(error);
+        }
+        let _session = self.create_session(server, sub);
+
         Ok(token_set)
     }
     fn generate_dpop_key(metadata: &OAuthAuthorizationServerMetadata) -> Option<Key> {
@@ -270,5 +282,12 @@ where
         let mut hasher = Sha256::new();
         hasher.update(verifier.as_bytes());
         (URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes())), verifier)
+    }
+    fn create_session(
+        &self,
+        server: OAuthServerAgent<T, D, H>,
+        sub: Did,
+    ) -> OAuthSession<N, T, D, H> {
+        OAuthSession::new(server, sub, self.session_store.clone())
     }
 }

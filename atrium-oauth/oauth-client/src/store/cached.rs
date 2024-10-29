@@ -69,17 +69,19 @@ where
 
     pub async fn get_cached<G>(&self, getter: G) -> Result<T, E>
     where
-        G: FnOnce() -> Getter<'static, Result<T, E>> + Send + 'static,
+        G: FnOnce(Option<T>) -> Getter<'static, Result<T, E>> + Send + 'static,
     {
         let mut rx = {
             let mut _self = self.0.lock().unwrap();
 
-            if let Some(value) = _self.inner.as_ref() {
-                if value.expires_at().map_or(true, |expires_at| Utc::now() <= expires_at.to_utc()) {
+            let value = match _self.inner.as_ref() {
+                Some(value)
+                    if value.expires_at().map_or(true, |exp| Utc::now() <= exp.to_utc()) =>
+                {
                     return Ok(value.clone());
                 }
-            }
-
+                value => value.cloned(),
+            };
             if let Some(pending) = _self.pending.as_ref() {
                 pending.subscribe()
             } else {
@@ -87,7 +89,7 @@ where
                 _self.pending = Some(tx.clone());
                 let cloned = self.0.clone();
 
-                let fut = getter();
+                let fut = getter(value);
 
                 tokio::spawn(async move {
                     let response = fut.await;

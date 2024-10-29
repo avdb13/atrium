@@ -5,7 +5,8 @@ use crate::keyset::Keyset;
 use crate::resolver::OAuthResolver;
 use crate::types::{
     AuthorizationCodeParameters, OAuthAuthorizationServerMetadata, OAuthClientMetadata,
-    OAuthTokenResponse, PushedAuthorizationRequestParameters, TokenRequestParameters, TokenSet,
+    OAuthTokenResponse, PushedAuthorizationRequestParameters, RefreshTokenParameters,
+    RevocationRequestParameters, TokenRequestParameters, TokenSet,
 };
 use crate::utils::{compare_algos, generate_nonce};
 use atrium_api::types::string::Datetime;
@@ -56,7 +57,7 @@ pub type Result<T> = core::result::Result<T, Error>;
 #[allow(dead_code)]
 pub enum OAuthRequest {
     Token(TokenRequestParameters),
-    Revocation,
+    Revocation(RevocationRequestParameters),
     Introspection,
     PushedAuthorizationRequest(PushedAuthorizationRequestParameters),
 }
@@ -65,14 +66,14 @@ impl OAuthRequest {
     fn name(&self) -> String {
         String::from(match self {
             Self::Token(_) => "token",
-            Self::Revocation => "revocation",
+            Self::Revocation(_) => "revocation",
             Self::Introspection => "introspection",
             Self::PushedAuthorizationRequest(_) => "pushed_authorization_request",
         })
     }
     fn expected_status(&self) -> StatusCode {
         match self {
-            Self::Token(_) => StatusCode::OK,
+            Self::Token(_) | Self::Revocation(_) => StatusCode::OK,
             Self::PushedAuthorizationRequest(_) => StatusCode::CREATED,
             _ => unimplemented!(),
         }
@@ -96,6 +97,8 @@ where
 pub struct OAuthServerAgent<T, D, H>
 where
     T: HttpClient + Send + Sync + 'static,
+    D: DidResolver + Send + Sync + 'static,
+    H: HandleResolver + Send + Sync + 'static,
 {
     server_metadata: OAuthAuthorizationServerMetadata,
     client_metadata: OAuthClientMetadata,
@@ -173,6 +176,37 @@ where
         )
         .await
     }
+    pub async fn revoke(&self, token: &str) -> Result<()> {
+        self.request(OAuthRequest::Revocation(RevocationRequestParameters { token: token.into() }))
+            .await
+    }
+    pub async fn refresh(&self, token_set: TokenSet) -> Result<TokenSet> {
+        let TokenSet { sub, scope, refresh_token, access_token, token_type, expires_at, .. } =
+            token_set;
+        let expires_in = expires_at.map(|expires_at| {
+            expires_at.as_ref().signed_duration_since(Datetime::now().as_ref()).num_seconds()
+        });
+        let token_response = OAuthTokenResponse {
+            access_token,
+            token_type,
+            expires_in,
+            refresh_token,
+            scope,
+            sub: Some(sub),
+        };
+        let TokenSet { scope, refresh_token: Some(refresh_token), .. } =
+            self.verify_token_response(token_response).await?
+        else {
+            todo!();
+        };
+        self.verify_token_response(
+            self.request(OAuthRequest::Token(TokenRequestParameters::RefreshToken(
+                RefreshTokenParameters { refresh_token, scope },
+            )))
+            .await?,
+        )
+        .await
+    }
     pub async fn request<O>(&self, request: OAuthRequest) -> Result<O>
     where
         O: serde::de::DeserializeOwned,
@@ -183,6 +217,7 @@ where
         let body = match &request {
             OAuthRequest::Token(params) => self.build_body(params)?,
             OAuthRequest::PushedAuthorizationRequest(params) => self.build_body(params)?,
+            OAuthRequest::Revocation(params) => self.build_body(params)?,
             _ => unimplemented!(),
         };
         let req = Request::builder()
@@ -268,7 +303,7 @@ where
     fn endpoint(&self, request: &OAuthRequest) -> Option<&String> {
         match request {
             OAuthRequest::Token(_) => Some(&self.server_metadata.token_endpoint),
-            OAuthRequest::Revocation => self.server_metadata.revocation_endpoint.as_ref(),
+            OAuthRequest::Revocation(_) => self.server_metadata.revocation_endpoint.as_ref(),
             OAuthRequest::Introspection => self.server_metadata.introspection_endpoint.as_ref(),
             OAuthRequest::PushedAuthorizationRequest(_) => {
                 self.server_metadata.pushed_authorization_request_endpoint.as_ref()
