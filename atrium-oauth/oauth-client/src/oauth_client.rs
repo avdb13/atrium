@@ -3,6 +3,7 @@ use crate::error::{Error, Result};
 use crate::keyset::Keyset;
 use crate::resolver::{OAuthResolver, OAuthResolverConfig};
 use crate::server_agent::{OAuthRequest, OAuthServerAgent};
+use crate::store::session::SessionStore;
 use crate::store::state::{InternalStateData, StateStore};
 use crate::types::{
     AuthorizationCodeChallengeMethod, AuthorizationResponseType, AuthorizeOptions, CallbackParams,
@@ -22,7 +23,7 @@ use sha2::{Digest, Sha256};
 use std::sync::Arc;
 
 #[cfg(feature = "default-client")]
-pub struct OAuthClientConfig<S, M, D, H>
+pub struct OAuthClientConfig<S, N, M, D, H>
 where
     M: TryIntoOAuthClientMetadata,
 {
@@ -31,12 +32,13 @@ where
     pub keys: Option<Vec<Jwk>>,
     // Stores
     pub state_store: S,
+    pub session_store: N,
     // Services
     pub resolver: OAuthResolverConfig<D, H>,
 }
 
 #[cfg(not(feature = "default-client"))]
-pub struct OAuthClientConfig<S, T, M, D, H>
+pub struct OAuthClientConfig<S, N, T, M, D, H>
 where
     M: TryIntoOAuthClientMetadata,
 {
@@ -45,6 +47,7 @@ where
     pub keys: Option<Vec<Jwk>>,
     // Stores
     pub state_store: S,
+    pub session_store: N,
     // Services
     pub resolver: OAuthResolverConfig<D, H>,
     // Others
@@ -52,37 +55,42 @@ where
 }
 
 #[cfg(feature = "default-client")]
-pub struct OAuthClient<S, D, H, T = crate::http_client::default::DefaultHttpClient>
+pub struct OAuthClient<S, N, D, H, T = crate::http_client::default::DefaultHttpClient>
 where
     S: StateStore,
+    N: SessionStore,
     T: HttpClient + Send + Sync + 'static,
 {
     pub client_metadata: OAuthClientMetadata,
     keyset: Option<Keyset>,
     resolver: Arc<OAuthResolver<T, D, H>>,
     state_store: S,
+    session_store: N,
     http_client: Arc<T>,
 }
 
 #[cfg(not(feature = "default-client"))]
-pub struct OAuthClient<S, D, H, T>
+pub struct OAuthClient<S, N, D, H, T>
 where
     S: StateStore,
+    N: SessionStore,
     T: HttpClient + Send + Sync + 'static,
 {
     pub client_metadata: OAuthClientMetadata,
     keyset: Option<Keyset>,
     resolver: Arc<OAuthResolver<T, D, H>>,
     state_store: S,
+    session_store: N,
     http_client: Arc<T>,
 }
 
 #[cfg(feature = "default-client")]
-impl<S, D, H> OAuthClient<S, D, H, crate::http_client::default::DefaultHttpClient>
+impl<S, N, D, H> OAuthClient<S, N, D, H, crate::http_client::default::DefaultHttpClient>
 where
     S: StateStore,
+    N: SessionStore,
 {
-    pub fn new<M>(config: OAuthClientConfig<S, M, D, H>) -> Result<Self>
+    pub fn new<M>(config: OAuthClientConfig<S, N, M, D, H>) -> Result<Self>
     where
         M: TryIntoOAuthClientMetadata<Error = crate::atproto::Error>,
     {
@@ -94,18 +102,20 @@ where
             keyset,
             resolver: Arc::new(OAuthResolver::new(config.resolver, http_client.clone())),
             state_store: config.state_store,
+            session_store: config.session_store,
             http_client,
         })
     }
 }
 
 #[cfg(not(feature = "default-client"))]
-impl<S, D, H, T> OAuthClient<S, D, H, T>
+impl<S, N, D, H, T> OAuthClient<S, N, D, H, T>
 where
     S: StateStore,
+    N: SessionStore,
     T: HttpClient + Send + Sync + 'static,
 {
-    pub fn new<M>(config: OAuthClientConfig<S, T, M, D, H>) -> Result<Self>
+    pub fn new<M>(config: OAuthClientConfig<S, N, T, M, D, H>) -> Result<Self>
     where
         M: TryIntoOAuthClientMetadata<Error = crate::atproto::Error>,
     {
@@ -117,14 +127,16 @@ where
             keyset,
             resolver: Arc::new(OAuthResolver::new(config.resolver, http_client.clone())),
             state_store: config.state_store,
+            session_store: config.session_store,
             http_client,
         })
     }
 }
 
-impl<S, D, H, T> OAuthClient<S, D, H, T>
+impl<S, N, D, H, T> OAuthClient<S, N, D, H, T>
 where
     S: StateStore,
+    N: SessionStore,
     D: DidResolver + Send + Sync + 'static,
     H: HandleResolver + Send + Sync + 'static,
     T: HttpClient + Send + Sync + 'static,
