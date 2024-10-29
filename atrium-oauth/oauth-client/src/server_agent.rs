@@ -275,3 +275,83 @@ where
         }
     }
 }
+
+#[cfg(feature = "default-client")]
+pub struct OAuthServerFactory<D, H, T = crate::http_client::default::DefaultHttpClient>
+where
+    T: HttpClient + Send + Sync + 'static,
+{
+    pub client_metadata: OAuthClientMetadata,
+    keyset: Option<Keyset>,
+    resolver: Arc<OAuthResolver<T, D, H>>,
+    http_client: Arc<T>,
+}
+
+#[cfg(not(feature = "default-client"))]
+pub struct OAuthServerFactory<D, H, T>
+where
+    T: HttpClient + Send + Sync + 'static,
+{
+    pub client_metadata: OAuthClientMetadata,
+    keyset: Option<Keyset>,
+    resolver: Arc<OAuthResolver<T, D, H>>,
+    http_client: Arc<T>,
+}
+
+#[cfg(feature = "default-client")]
+impl<D, H> OAuthServerFactory<D, H, crate::http_client::default::DefaultHttpClient> {
+    pub fn new(
+        resolver: Arc<OAuthResolver<crate::http_client::default::DefaultHttpClient, D, H>>,
+        client_metadata: OAuthClientMetadata,
+        keyset: Option<Keyset>,
+    ) -> Self {
+        let http_client = Arc::new(crate::http_client::default::DefaultHttpClient::default());
+        Self { client_metadata, resolver, http_client, keyset }
+    }
+}
+#[cfg(not(feature = "default-client"))]
+impl<D, H, T> OAuthServerFactory<D, H, T>
+where
+    T: HttpClient + Send + Sync + 'static,
+{
+    pub fn new(
+        http_client: T,
+        resolver: Arc<OAuthResolver<crate::http_client::default::DefaultHttpClient, D, H>>,
+        client_metadata: OAuthClientMetadata,
+        keyset: Option<Keyset>,
+    ) -> Self {
+        let http_client = Arc::new(http_client);
+        Self { client_metadata, resolver, http_client, keyset }
+    }
+}
+
+impl<D, H, T> OAuthServerFactory<D, H, T>
+where
+    D: DidResolver + Send + Sync + 'static,
+    H: HandleResolver + Send + Sync + 'static,
+    T: HttpClient + Send + Sync + 'static,
+{
+    pub async fn from_issuer(
+        &self,
+        issuer: &str,
+        dpop_key: Key,
+    ) -> Result<OAuthServerAgent<T, D, H>> {
+        let server_metadata = self.resolver.get_authorization_server_metadata(issuer).await?;
+        self.from_metadata(server_metadata, dpop_key).await
+    }
+    pub async fn from_metadata(
+        &self,
+        server_metadata: OAuthAuthorizationServerMetadata,
+        dpop_key: Key,
+    ) -> Result<OAuthServerAgent<T, D, H>> {
+        let server = OAuthServerAgent::new(
+            dpop_key,
+            server_metadata,
+            self.client_metadata.clone(),
+            self.resolver.clone(),
+            self.http_client.clone(),
+            self.keyset.clone(),
+        )?;
+        Ok(server)
+    }
+}

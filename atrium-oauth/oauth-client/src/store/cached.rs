@@ -10,6 +10,25 @@ use tokio::sync::broadcast;
 
 pub type Getter<'f, T> = Pin<Box<dyn Future<Output = T> + Send + 'f>>;
 
+pub struct CachedStore<S>
+where
+// S: SimpleStore<K, Cached<V, E>>,
+// K: Clone + Eq + Hash,
+// V: Expired + Clone + Send + Sync + 'static,
+// E: Error + Clone + Send + Sync + 'static,
+{
+    pub store: S,
+}
+
+impl<S> Default for CachedStore<S>
+where
+    S: Default,
+{
+    fn default() -> Self {
+        Self { store: Default::default() }
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct Cached<T, E>(Arc<Mutex<Locked<T, E>>>)
 where
