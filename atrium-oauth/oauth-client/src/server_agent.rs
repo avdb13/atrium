@@ -4,8 +4,8 @@ use crate::jose::jwt::{RegisteredClaims, RegisteredClaimsAud};
 use crate::keyset::Keyset;
 use crate::resolver::OAuthResolver;
 use crate::types::{
-    OAuthAuthorizationServerMetadata, OAuthClientMetadata, OAuthTokenResponse,
-    PushedAuthorizationRequestParameters, TokenGrantType, TokenRequestParameters, TokenSet,
+    AuthorizationCodeParameters, OAuthAuthorizationServerMetadata, OAuthClientMetadata,
+    OAuthTokenResponse, PushedAuthorizationRequestParameters, TokenRequestParameters, TokenSet,
 };
 use crate::utils::{compare_algos, generate_nonce};
 use atrium_api::types::string::Datetime;
@@ -162,12 +162,13 @@ where
     }
     pub async fn exchange_code(&self, code: &str, verifier: &str) -> Result<TokenSet> {
         self.verify_token_response(
-            self.request(OAuthRequest::Token(TokenRequestParameters {
-                grant_type: TokenGrantType::AuthorizationCode,
-                code: code.into(),
-                redirect_uri: self.client_metadata.redirect_uris[0].clone(), // ?
-                code_verifier: verifier.into(),
-            }))
+            self.request(OAuthRequest::Token(TokenRequestParameters::AuthorizationCode(
+                AuthorizationCodeParameters {
+                    code: code.into(),
+                    redirect_uri: self.client_metadata.redirect_uris[0].clone(), // ?
+                    code_verifier: verifier.into(),
+                },
+            )))
             .await?,
         )
         .await

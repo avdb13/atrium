@@ -7,8 +7,9 @@ mod token;
 pub use client_metadata::{OAuthClientMetadata, TryIntoOAuthClientMetadata};
 pub use metadata::{OAuthAuthorizationServerMetadata, OAuthProtectedResourceMetadata};
 pub use request::{
-    AuthorizationCodeChallengeMethod, AuthorizationResponseType,
-    PushedAuthorizationRequestParameters, TokenGrantType, TokenRequestParameters,
+    AuthorizationCodeChallengeMethod, AuthorizationCodeParameters, AuthorizationResponseType,
+    PushedAuthorizationRequestParameters, RefreshTokenParameters, RevocationRequestParameters,
+    TokenRequestParameters,
 };
 pub use response::{OAuthPusehedAuthorizationRequestResponse, OAuthTokenResponse};
 use serde::Deserialize;

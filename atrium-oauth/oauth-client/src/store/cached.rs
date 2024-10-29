@@ -1,6 +1,8 @@
 use std::{
     error::Error,
+    fmt::Debug,
     future::Future,
+    hash::Hash,
     pin::Pin,
     sync::{Arc, Mutex},
 };
@@ -8,25 +10,26 @@ use std::{
 use chrono::{DateTime, FixedOffset, Utc};
 use tokio::sync::broadcast;
 
+use super::{memory::MemorySimpleStore, SimpleStore};
+
 pub type Getter<'f, T> = Pin<Box<dyn Future<Output = T> + Send + 'f>>;
 
-pub struct CachedStore<S>
+pub trait CachedStore<K, V, E>: SimpleStore<K, Cached<V, E>>
 where
-// S: SimpleStore<K, Cached<V, E>>,
-// K: Clone + Eq + Hash,
-// V: Expired + Clone + Send + Sync + 'static,
-// E: Error + Clone + Send + Sync + 'static,
+    K: Clone + Debug + Eq + Hash + Send + Sync + 'static,
+    V: Expired + Debug + Clone + Send + Sync + 'static,
+    E: Error + Clone + Send + Sync + 'static,
 {
-    pub store: S,
 }
 
-impl<S> Default for CachedStore<S>
+pub type CachedMemoryStore<K, V, E> = MemorySimpleStore<K, Cached<V, E>>;
+
+impl<K, V, E> CachedStore<K, V, E> for CachedMemoryStore<K, V, E>
 where
-    S: Default,
+    K: Clone + Debug + Eq + Hash + Send + Sync + 'static,
+    V: Expired + Debug + Clone + Send + Sync + 'static,
+    E: Error + Clone + Send + Sync + 'static,
 {
-    fn default() -> Self {
-        Self { store: Default::default() }
-    }
 }
 
 #[derive(Clone, Debug, Default)]
