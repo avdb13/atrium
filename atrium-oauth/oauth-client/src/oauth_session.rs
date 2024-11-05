@@ -9,7 +9,7 @@ use crate::{
     server_agent::OAuthServerAgent,
     store::session::{Session, SessionStore},
     types::TokenInfo,
-    Result, TokenSet,
+    TokenSet,
 };
 
 #[derive(Clone, Debug, Error)]
@@ -26,6 +26,7 @@ where
     pub server: Arc<OAuthServerAgent<T, D, H>>,
     pub sub: Did,
 }
+
 impl<S, T, D, H> OAuthSession<S, T, D, H>
 where
     S: SessionStore,
@@ -37,7 +38,7 @@ where
         Self { server: Arc::new(server), sub, session_store }
     }
 
-    pub async fn get_token_set(&self, _refresh: Option<bool>) -> Result<TokenSet> {
+    pub async fn get_token_set(&self, _refresh: Option<bool>) -> crate::Result<TokenSet> {
         let Some(value) = self.session_store.get(&self.sub).await.unwrap() else { todo!() };
 
         let server = self.server.clone();
@@ -57,14 +58,14 @@ where
         Ok(session.token_set)
     }
 
-    pub async fn get_token_info(&self, refresh: Option<bool>) -> Result<TokenInfo> {
+    pub async fn get_token_info(&self, refresh: Option<bool>) -> crate::Result<TokenInfo> {
         let TokenSet { iss, sub, aud, scope, expires_at, .. } = self.get_token_set(refresh).await?;
         let expires_at = expires_at.as_ref().map(AsRef::as_ref).cloned();
 
         Ok(TokenInfo::new(iss, sub.parse().expect("valid Did"), aud, scope, expires_at))
     }
 
-    pub async fn logout(&self, _refresh: Option<bool>) -> Result<()> {
+    pub async fn logout(&self, _refresh: Option<bool>) -> crate::Result<()> {
         let token_set = self.get_token_set(Some(false)).await?;
 
         self.server.revoke(&token_set.access_token).await?;
@@ -73,3 +74,39 @@ where
         Ok(())
     }
 }
+
+// impl<S, T, D, H> SessionManager<S> for OAuthSession<S, T, D, H>
+// where
+//     S: SessionStore,
+//     T: HttpClient + Send + Sync + 'static,
+//     D: DidResolver + Send + Sync + 'static,
+//     H: HandleResolver + Send + Sync + 'static,
+// {
+//     async fn get_session(&self) -> Result<Option<Session>> {
+//         self.session_store.get(&self.sub).await
+//     }
+
+//     async fn set_session(&self, session: Session) -> Result<Option<Session>> {
+//         let old = self.session_store.get(&self.sub).await.unwrap();
+
+//         let server = self.server.clone();
+
+//         let get_cached = value.get_cached(|session| {
+//             Box::pin(async move {
+//                 let Some(session) = session else { todo!() };
+
+//                 Ok(Session {
+//                     dpop_key: session.dpop_key,
+//                     token_set: server.refresh(session.token_set.clone()).await.unwrap(),
+//                 })
+//             })
+//         });
+//         let session = get_cached.await.unwrap();
+
+//         Ok(session.token_set)
+//     }
+
+//     async fn clear_session(&self) -> Result<()> {
+//         todo!()
+//     }
+// }

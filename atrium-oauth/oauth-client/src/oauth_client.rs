@@ -4,7 +4,6 @@ use crate::keyset::Keyset;
 use crate::oauth_session::OAuthSession;
 use crate::resolver::{OAuthResolver, OAuthResolverConfig};
 use crate::server_agent::{OAuthRequest, OAuthServerAgent, OAuthServerFactory};
-use crate::store::cached::Cached;
 use crate::store::session::{Session, SessionStore};
 use crate::store::state::{InternalStateData, StateStore};
 use crate::types::{
@@ -15,7 +14,9 @@ use crate::types::{
 };
 use crate::utils::{compare_algos, generate_key, generate_nonce, get_random_values};
 use atrium_api::types::string::Did;
-use atrium_identity::{did::DidResolver, handle::HandleResolver, Resolver};
+use atrium_common::resolver::{self, Resolver};
+use atrium_common::store::cached::Cached;
+use atrium_identity::{did::DidResolver, handle::HandleResolver};
 use atrium_xrpc::HttpClient;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
@@ -164,7 +165,9 @@ where
         } else {
             self.client_metadata.redirect_uris[0].clone()
         };
-        let (metadata, identity) = self.resolver.resolve(input.as_ref()).await?;
+        let Some((metadata, identity)) = self.resolver.resolve(input.as_ref()).await? else {
+            return Err(Error::Authorize(resolver::Error::NotFound.to_string()));
+        };
         let Some(dpop_key) = Self::generate_dpop_key(&metadata) else {
             return Err(Error::Authorize("none of the algorithms worked".into()));
         };

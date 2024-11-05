@@ -1,8 +1,8 @@
 use super::DidResolver;
 use crate::error::{Error, Result};
-use crate::Resolver;
 use atrium_api::did_doc::DidDocument;
 use atrium_api::types::string::Did;
+use atrium_common::resolver::{self, Resolver};
 use atrium_xrpc::http::uri::Builder;
 use atrium_xrpc::http::{Request, Uri};
 use atrium_xrpc::HttpClient;
@@ -27,27 +27,30 @@ impl<T> PlcDidResolver<T> {
     }
 }
 
-impl<T> Resolver for PlcDidResolver<T>
+impl<T> Resolver<Error> for PlcDidResolver<T>
 where
     T: HttpClient + Send + Sync + 'static,
 {
     type Input = Did;
     type Output = DidDocument;
 
-    async fn resolve(&self, did: &Self::Input) -> Result<Self::Output> {
-        let uri = Builder::from(self.plc_directory_url.parse::<Uri>()?)
-            .path_and_query(format!("/{}", did.as_str()))
-            .build()?;
-        let res = self
-            .http_client
-            .send_http(Request::builder().uri(uri).body(Vec::new())?)
-            .await
-            .map_err(Error::HttpClient)?;
-        if res.status().is_success() {
-            Ok(serde_json::from_slice(res.body())?)
-        } else {
-            Err(Error::HttpStatus(res.status()))
-        }
+    async fn resolve(&self, did: &Self::Input) -> Result<Option<Self::Output>> {
+        let result = || async {
+            let uri = Builder::from(self.plc_directory_url.parse::<Uri>()?)
+                .path_and_query(format!("/{}", did.as_str()))
+                .build()?;
+            let res = self
+                .http_client
+                .send_http(Request::builder().uri(uri).body(Vec::new())?)
+                .await
+                .map_err(resolver::Error::HttpClient)?;
+            if res.status().is_success() {
+                Ok(Some(serde_json::from_slice::<DidDocument>(res.body())?))
+            } else {
+                Err(resolver::Error::HttpStatus(res.status()))
+            }
+        };
+        result().await.map_err(Error::Resolver)
     }
 }
 

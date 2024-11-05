@@ -1,8 +1,8 @@
 use crate::jose::create_signed_jwt;
 use crate::jose::jws::RegisteredHeader;
 use crate::jose::jwt::{Claims, PublicClaims, RegisteredClaims};
-use crate::store::memory::MemorySimpleStore;
-use crate::store::SimpleStore;
+use atrium_common::store::memory::MemorySimpleStore;
+use atrium_common::store::SimpleStore;
 use atrium_xrpc::http::{Request, Response};
 use atrium_xrpc::HttpClient;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;

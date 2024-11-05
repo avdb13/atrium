@@ -1,5 +1,4 @@
-use super::memory::MemorySimpleStore;
-use super::SimpleStore;
+use atrium_common::store::{memory::MemorySimpleStore, SimpleStore};
 use jose_jwk::Key;
 use serde::{Deserialize, Serialize};
 

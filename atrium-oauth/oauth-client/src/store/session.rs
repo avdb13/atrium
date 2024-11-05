@@ -1,15 +1,14 @@
 use atrium_api::types::string::Did;
+use atrium_common::store::{
+    cached::{Cached, Expired},
+    memory::MemorySimpleStore,
+    SimpleStore,
+};
 use chrono::{DateTime, FixedOffset};
 use jose_jwk::Key;
 use serde::{Deserialize, Serialize};
 
 use crate::{oauth_session, TokenSet};
-
-use super::{
-    cached::{Cached, Expired},
-    memory::MemorySimpleStore,
-    SimpleStore,
-};
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Session {

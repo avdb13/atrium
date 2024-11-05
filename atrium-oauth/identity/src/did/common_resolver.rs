@@ -1,12 +1,13 @@
 use atrium_api::did_doc::DidDocument;
 use atrium_api::types::string::Did;
+use atrium_common::resolver::Resolver;
 use atrium_xrpc::HttpClient;
 
 use super::plc_resolver::{PlcDidResolver, PlcDidResolverConfig};
 use super::web_resolver::{WebDidResolver, WebDidResolverConfig};
 use super::DidResolver;
 use crate::error::{Error, Result};
-use crate::Resolver;
+use crate::IdentityError;
 use std::sync::Arc;
 
 #[derive(Clone, Debug)]
@@ -34,7 +35,7 @@ impl<T> CommonDidResolver<T> {
     }
 }
 
-impl<T> Resolver for CommonDidResolver<T>
+impl<T> Resolver<Error> for CommonDidResolver<T>
 where
     PlcDidResolver<T>: DidResolver + Send + Sync + 'static,
     WebDidResolver<T>: DidResolver + Send + Sync + 'static,
@@ -42,11 +43,11 @@ where
     type Input = Did;
     type Output = DidDocument;
 
-    async fn resolve(&self, did: &Self::Input) -> Result<Self::Output> {
+    async fn resolve(&self, did: &Self::Input) -> Result<Option<Self::Output>> {
         match did.strip_prefix("did:").and_then(|s| s.split_once(':').map(|(method, _)| method)) {
             Some("plc") => self.plc_resolver.resolve(did).await,
             Some("web") => self.web_resolver.resolve(did).await,
-            _ => Err(Error::UnsupportedDidMethod(did.clone())),
+            _ => Err(IdentityError::UnsupportedDidMethod(did.clone()).into()),
         }
     }
 }

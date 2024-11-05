@@ -4,5 +4,4 @@ pub mod handle;
 pub mod identity_resolver;
 pub mod resolver;
 
-pub use self::error::{Error, Result};
-pub use self::resolver::Resolver;
+pub use self::error::{Error, IdentityError, Result};

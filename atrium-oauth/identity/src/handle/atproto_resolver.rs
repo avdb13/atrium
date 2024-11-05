@@ -2,8 +2,9 @@ use super::dns_resolver::{DnsHandleResolver, DnsHandleResolverConfig, DnsTxtReso
 use super::well_known_resolver::{WellKnownHandleResolver, WellKnownHandleResolverConfig};
 use super::HandleResolver;
 use crate::error::Result;
-use crate::Resolver;
+use crate::Error;
 use atrium_api::types::string::{Did, Handle};
+use atrium_common::resolver::Resolver;
 use atrium_xrpc::HttpClient;
 use std::sync::Arc;
 
@@ -31,7 +32,7 @@ impl<R, T> AtprotoHandleResolver<R, T> {
     }
 }
 
-impl<R, T> Resolver for AtprotoHandleResolver<R, T>
+impl<R, T> Resolver<Error> for AtprotoHandleResolver<R, T>
 where
     R: DnsTxtResolver + Send + Sync + 'static,
     T: HttpClient + Send + Sync + 'static,
@@ -39,7 +40,7 @@ where
     type Input = Handle;
     type Output = Did;
 
-    async fn resolve(&self, handle: &Self::Input) -> Result<Self::Output> {
+    async fn resolve(&self, handle: &Self::Input) -> Result<Option<Self::Output>> {
         let d_fut = self.dns.resolve(handle);
         let h_fut = self.http.resolve(handle);
         if let Ok(did) = d_fut.await {

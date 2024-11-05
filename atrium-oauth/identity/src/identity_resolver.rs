@@ -1,6 +1,8 @@
 use crate::error::{Error, Result};
-use crate::{did::DidResolver, handle::HandleResolver, Resolver};
+use crate::IdentityError;
+use crate::{did::DidResolver, handle::HandleResolver};
 use atrium_api::types::string::AtIdentifier;
+use atrium_common::resolver::{self, Resolver};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -26,7 +28,7 @@ impl<D, H> IdentityResolver<D, H> {
     }
 }
 
-impl<D, H> Resolver for IdentityResolver<D, H>
+impl<D, H> Resolver<Error> for IdentityResolver<D, H>
 where
     D: DidResolver + Send + Sync + 'static,
     H: HandleResolver + Send + Sync + 'static,
@@ -34,31 +36,42 @@ where
     type Input = str;
     type Output = ResolvedIdentity;
 
-    async fn resolve(&self, input: &Self::Input) -> Result<Self::Output> {
-        let document =
-            match input.parse::<AtIdentifier>().map_err(|e| Error::AtIdentifier(e.to_string()))? {
-                AtIdentifier::Did(did) => self.did_resolver.resolve(&did).await?,
-                AtIdentifier::Handle(handle) => {
-                    let did = self.handle_resolver.resolve(&handle).await?;
-                    let document = self.did_resolver.resolve(&did).await?;
-                    if let Some(aka) = &document.also_known_as {
-                        if !aka.contains(&format!("at://{}", handle.as_str())) {
-                            return Err(Error::DidDocument(format!(
-                                "did document for `{}` does not include the handle `{}`",
-                                did.as_str(),
-                                handle.as_str()
-                            )));
-                        }
+    async fn resolve(&self, input: &Self::Input) -> Result<Option<Self::Output>> {
+        let document = match input
+            .parse::<AtIdentifier>()
+            .map_err(|e| IdentityError::AtIdentifier(e.to_string()))?
+        {
+            AtIdentifier::Did(did) => self.did_resolver.resolve(&did).await?,
+            AtIdentifier::Handle(handle) => {
+                let Some(did) = self.handle_resolver.resolve(&handle).await? else {
+                    return Ok(None);
+                };
+                let Some(document) = self.did_resolver.resolve(&did).await? else {
+                    return Ok(None);
+                };
+                if let Some(aka) = &document.also_known_as {
+                    if !aka.contains(&format!("at://{}", handle.as_str())) {
+                        return Err(IdentityError::DidDocument(format!(
+                            "did document for `{}` does not include the handle `{}`",
+                            did.as_str(),
+                            handle.as_str()
+                        ))
+                        .into());
                     }
-                    document
                 }
-            };
+                Some(document)
+            }
+        };
+        let Some(document) = document else {
+            return Ok(None);
+        };
         let Some(service) = document.get_pds_endpoint() else {
-            return Err(Error::DidDocument(format!(
+            return Err(IdentityError::DidDocument(format!(
                 "no valid `AtprotoPersonalDataServer` service found in `{}`",
                 document.id
-            )));
+            ))
+            .into());
         };
-        Ok(ResolvedIdentity { did: document.id, pds: service })
+        Ok(Some(ResolvedIdentity { did: document.id, pds: service }))
     }
 }

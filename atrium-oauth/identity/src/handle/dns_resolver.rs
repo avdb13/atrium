@@ -1,7 +1,10 @@
 use super::HandleResolver;
-use crate::error::{Error, Result};
-use crate::Resolver;
+use crate::{
+    error::{Error, Result},
+    IdentityError,
+};
 use atrium_api::types::string::{Did, Handle};
+use atrium_common::resolver::{self, Resolver};
 use std::future::Future;
 
 const SUBDOMAIN: &str = "_atproto";
@@ -35,25 +38,27 @@ impl<R> DnsHandleResolver<R> {
     }
 }
 
-impl<R> Resolver for DnsHandleResolver<R>
+impl<R> Resolver<Error> for DnsHandleResolver<R>
 where
     R: DnsTxtResolver + Send + Sync + 'static,
 {
     type Input = Handle;
     type Output = Did;
 
-    async fn resolve(&self, handle: &Self::Input) -> Result<Self::Output> {
+    async fn resolve(&self, handle: &Self::Input) -> Result<Option<Self::Output>> {
         for result in self
             .dns_txt_resolver
             .resolve(&format!("{SUBDOMAIN}.{}", handle.as_ref()))
             .await
-            .map_err(Error::DnsResolver)?
+            .map_err(resolver::Error::DnsResolver)?
         {
             if let Some(did) = result.strip_prefix(PREFIX) {
-                return did.parse::<Did>().map_err(|e| Error::Did(e.to_string()));
+                return Ok(Some(
+                    did.parse::<Did>().map_err(|e| IdentityError::Did(e.to_string()))?,
+                ));
             }
         }
-        Err(Error::NotFound)
+        Ok(None)
     }
 }
 
