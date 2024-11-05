@@ -5,18 +5,19 @@ use std::future::Future;
 
 use crate::error::{Error, Result};
 use crate::BskyAgent;
-use atrium_api::agent::store::SessionStore;
+use atrium_api::agent::Session;
 use atrium_api::com::atproto::repo::{
     create_record, delete_record, get_record, list_records, put_record,
 };
 use atrium_api::types::{Collection, LimitedNonZeroU8, TryIntoUnknown};
 use atrium_api::xrpc::XrpcClient;
+use atrium_common::store::SimpleStore;
 
 #[cfg_attr(not(target_arch = "wasm32"), trait_variant::make(Send))]
 pub trait Record<T, S>
 where
     T: XrpcClient + Send + Sync,
-    S: SessionStore + Send + Sync,
+    S: SimpleStore<(), Session> + Send + Sync,
 {
     fn list(
         agent: &BskyAgent<T, S>,
@@ -45,7 +46,7 @@ macro_rules! record_impl {
         impl<T, S> Record<T, S> for $record
         where
             T: XrpcClient + Send + Sync,
-            S: SessionStore + Send + Sync,
+            S: SimpleStore<(), Session> + Send + Sync,
         {
             async fn list(
                 agent: &BskyAgent<T, S>,
@@ -162,7 +163,7 @@ macro_rules! record_impl {
         impl<T, S> Record<T, S> for $record_data
         where
             T: XrpcClient + Send + Sync,
-            S: SessionStore + Send + Sync,
+            S: SimpleStore<(), Session> + Send + Sync,
         {
             async fn list(
                 agent: &BskyAgent<T, S>,
@@ -272,6 +273,8 @@ record_impl!(
 
 #[cfg(test)]
 mod tests {
+    use std::convert::Infallible;
+
     use super::*;
     use crate::agent::BskyAgentBuilder;
     use crate::tests::FAKE_CID;
@@ -319,11 +322,13 @@ mod tests {
         }
     }
 
-    struct MockSessionStore;
+    struct MockSimpleStore;
 
-    impl SessionStore for MockSessionStore {
-        async fn get_session(&self) -> Option<Session> {
-            Some(
+    impl SimpleStore<(), Session> for MockSimpleStore {
+        type Error = Infallible;
+
+        async fn get(&self, _key: &()) -> std::result::Result<Option<Session>, Self::Error> {
+            Ok(Some(
                 OutputData {
                     access_jwt: String::from("access"),
                     active: None,
@@ -337,15 +342,22 @@ mod tests {
                     status: None,
                 }
                 .into(),
-            )
+            ))
         }
-        async fn set_session(&self, _: Session) {}
-        async fn clear_session(&self) {}
+        async fn set(&self, _key: (), _value: Session) -> std::result::Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn del(&self, _key: &()) -> std::result::Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn clear(&self) -> std::result::Result<(), Self::Error> {
+            Ok(())
+        }
     }
 
     #[tokio::test]
     async fn actor_profile() -> Result<()> {
-        let agent = BskyAgentBuilder::new(MockClient).store(MockSessionStore).build().await?;
+        let agent = BskyAgentBuilder::new(MockClient).store(MockSimpleStore).build().await?;
         // create
         let output = atrium_api::app::bsky::actor::profile::RecordData {
             avatar: None,
@@ -377,7 +389,7 @@ mod tests {
 
     #[tokio::test]
     async fn feed_post() -> Result<()> {
-        let agent = BskyAgentBuilder::new(MockClient).store(MockSessionStore).build().await?;
+        let agent = BskyAgentBuilder::new(MockClient).store(MockSimpleStore).build().await?;
         // create
         let output = atrium_api::app::bsky::feed::post::RecordData {
             created_at: Datetime::now(),
@@ -409,7 +421,7 @@ mod tests {
 
     #[tokio::test]
     async fn graph_follow() -> Result<()> {
-        let agent = BskyAgentBuilder::new(MockClient).store(MockSessionStore).build().await?;
+        let agent = BskyAgentBuilder::new(MockClient).store(MockSimpleStore).build().await?;
         // create
         let output = atrium_api::app::bsky::graph::follow::RecordData {
             created_at: Datetime::now(),

@@ -2,7 +2,7 @@ use crate::error::{Error, Result};
 use crate::IdentityError;
 use crate::{did::DidResolver, handle::HandleResolver};
 use atrium_api::types::string::AtIdentifier;
-use atrium_common::resolver::{self, Resolver};
+use atrium_common::resolver::Resolver;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

@@ -12,7 +12,6 @@ license.workspace = true
 keywords.workspace = true
 
 [dependencies]
-atrium-api = { workspace = true, default-features = false }
 atrium-xrpc.workspace = true
 chrono = { workspace = true, features = ["serde"] }
 dashmap.workspace = true

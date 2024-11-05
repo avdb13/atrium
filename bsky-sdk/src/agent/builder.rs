@@ -1,18 +1,19 @@
 use super::config::Config;
 use super::BskyAgent;
 use crate::error::Result;
-use atrium_api::agent::store::MemorySessionStore;
-use atrium_api::agent::{store::SessionStore, AtpAgent};
+use atrium_api::agent::{AtpAgent, Session};
 use atrium_api::xrpc::XrpcClient;
+use atrium_common::store::memory::MemorySimpleStore;
+use atrium_common::store::SimpleStore;
 #[cfg(feature = "default-client")]
 use atrium_xrpc_client::reqwest::ReqwestClient;
 use std::sync::Arc;
 
 /// A builder for creating a [`BskyAgent`].
-pub struct BskyAgentBuilder<T, S = MemorySessionStore>
+pub struct BskyAgentBuilder<T, S = MemorySimpleStore<(), Session>>
 where
     T: XrpcClient + Send + Sync,
-    S: SessionStore + Send + Sync,
+    S: SimpleStore<(), Session> + Send + Sync,
 {
     config: Config,
     store: S,
@@ -25,14 +26,18 @@ where
 {
     /// Create a new builder with the given XRPC client.
     pub fn new(client: T) -> Self {
-        Self { config: Config::default(), store: MemorySessionStore::default(), client }
+        Self {
+            config: Config::default(),
+            store: MemorySimpleStore::<(), Session>::default(),
+            client,
+        }
     }
 }
 
 impl<T, S> BskyAgentBuilder<T, S>
 where
     T: XrpcClient + Send + Sync,
-    S: SessionStore + Send + Sync,
+    S: SimpleStore<(), Session> + Send + Sync,
 {
     /// Set the configuration for the agent.
     pub fn config(mut self, config: Config) -> Self {
@@ -44,7 +49,7 @@ where
     /// Returns a new builder with the session store set.
     pub fn store<S0>(self, store: S0) -> BskyAgentBuilder<T, S0>
     where
-        S0: SessionStore + Send + Sync,
+        S0: SimpleStore<(), Session> + Send + Sync,
     {
         BskyAgentBuilder { config: self.config, store, client: self.client }
     }
@@ -91,10 +96,10 @@ where
 
 #[cfg_attr(docsrs, doc(cfg(feature = "default-client")))]
 #[cfg(feature = "default-client")]
-impl Default for BskyAgentBuilder<ReqwestClient, MemorySessionStore> {
+impl Default for BskyAgentBuilder<ReqwestClient, MemorySimpleStore<(), Session>> {
     /// Create a new builder with the default client and session store.
     ///
-    /// Default client is [`ReqwestClient`] and default session store is [`MemorySessionStore`].
+    /// Default client is [`ReqwestClient`] and default session store is [`MemorySimpleStore<(), Session>`].
     fn default() -> Self {
         Self::new(ReqwestClient::new(Config::default().endpoint))
     }
@@ -102,6 +107,8 @@ impl Default for BskyAgentBuilder<ReqwestClient, MemorySessionStore> {
 
 #[cfg(test)]
 mod tests {
+    use std::convert::Infallible;
+
     use super::*;
     use atrium_api::agent::Session;
     use atrium_api::com::atproto::server::create_session::OutputData;
@@ -122,14 +129,23 @@ mod tests {
         .into()
     }
 
-    struct MockSessionStore;
+    struct MockSimpleStore;
 
-    impl SessionStore for MockSessionStore {
-        async fn get_session(&self) -> Option<Session> {
-            Some(session())
+    impl SimpleStore<(), Session> for MockSimpleStore {
+        type Error = Infallible;
+
+        async fn get(&self, _key: &()) -> std::result::Result<Option<Session>, Self::Error> {
+            Ok(Some(session()))
         }
-        async fn set_session(&self, _: Session) {}
-        async fn clear_session(&self) {}
+        async fn set(&self, _key: (), _value: Session) -> std::result::Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn del(&self, _key: &()) -> std::result::Result<(), Self::Error> {
+            Ok(())
+        }
+        async fn clear(&self) -> std::result::Result<(), Self::Error> {
+            Ok(())
+        }
     }
 
     #[cfg(feature = "default-client")]
@@ -143,7 +159,7 @@ mod tests {
         }
         // with store
         {
-            let agent = BskyAgentBuilder::default().store(MockSessionStore).build().await?;
+            let agent = BskyAgentBuilder::default().store(MockSimpleStore).build().await?;
             assert_eq!(agent.get_endpoint().await, "https://bsky.social");
             assert_eq!(
                 agent.get_session().await.map(|session| session.data.handle),
@@ -177,7 +193,7 @@ mod tests {
         }
         // with store
         {
-            let agent = BskyAgentBuilder::new(MockClient).store(MockSessionStore).build().await?;
+            let agent = BskyAgentBuilder::new(MockClient).store(MockSimpleStore).build().await?;
             assert_eq!(agent.get_endpoint().await, "https://bsky.social");
             assert_eq!(
                 agent.get_session().await.map(|session| session.data.handle),

@@ -1,7 +1,8 @@
-use super::{Session, SessionStore};
+use super::Session;
 use crate::did_doc::DidDocument;
 use crate::types::string::Did;
 use crate::types::TryFromUnknown;
+use atrium_common::store::SimpleStore;
 use atrium_xrpc::error::{Error, Result, XrpcErrorKind};
 use atrium_xrpc::{HttpClient, OutputDataOrBytes, XrpcClient, XrpcRequest};
 use http::{Method, Request, Response};
@@ -66,7 +67,7 @@ where
 
 impl<S, T> XrpcClient for WrapperClient<S, T>
 where
-    S: SessionStore + Send + Sync,
+    S: SimpleStore<(), Session> + Send + Sync,
     T: XrpcClient + Send + Sync,
 {
     fn base_uri(&self) -> String {
@@ -98,7 +99,7 @@ pub struct Client<S, T> {
 
 impl<S, T> Client<S, T>
 where
-    S: SessionStore + Send + Sync,
+    S: SimpleStore<(), Session> + Send + Sync,
     T: XrpcClient + Send + Sync,
 {
     pub fn new(store: Arc<Store<S>>, xrpc: T) -> Self {
@@ -213,7 +214,7 @@ where
 
 impl<S, T> Clone for Client<S, T>
 where
-    S: SessionStore + Send + Sync,
+    S: SimpleStore<(), Session> + Send + Sync,
     T: XrpcClient + Send + Sync,
 {
     fn clone(&self) -> Self {
@@ -242,7 +243,7 @@ where
 
 impl<S, T> XrpcClient for Client<S, T>
 where
-    S: SessionStore + Send + Sync,
+    S: SimpleStore<(), Session> + Send + Sync,
     T: XrpcClient + Send + Sync,
 {
     fn base_uri(&self) -> String {
@@ -269,12 +270,16 @@ where
     }
 }
 
-pub struct Store<S> {
+pub struct Store<S>
+{
     inner: S,
     endpoint: RwLock<String>,
 }
 
-impl<S> Store<S> {
+impl<S> Store<S>
+where
+    S: SimpleStore<(), Session>,
+{
     pub fn new(inner: S, initial_endpoint: String) -> Self {
         Self { inner, endpoint: RwLock::new(initial_endpoint) }
     }
@@ -286,19 +291,13 @@ impl<S> Store<S> {
             *self.endpoint.write().expect("failed to write endpoint") = endpoint;
         }
     }
-}
-
-impl<S> SessionStore for Store<S>
-where
-    S: SessionStore + Send + Sync,
-{
-    async fn get_session(&self) -> Option<Session> {
-        self.inner.get_session().await
+    pub async fn get_session(&self) -> Option<Session> {
+        self.inner.get(&()).await.expect("todo")
     }
-    async fn set_session(&self, session: Session) {
-        self.inner.set_session(session).await;
+    pub async fn set_session(&self, session: Session) {
+        self.inner.set((), session).await.expect("todo")
     }
-    async fn clear_session(&self) {
-        self.inner.clear_session().await;
+    pub async fn clear_session(&self) {
+        self.inner.del(&()).await.expect("todo")
     }
 }
