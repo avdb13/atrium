@@ -1,7 +1,8 @@
-//! Implementation of [`AtpAgent`] and definitions of [`SimpleStore<(), Session>`] for it.
+//! Implementation of [`AtpAgent`].
 #[cfg(feature = "bluesky")]
 pub mod bluesky;
 mod inner;
+pub mod store;
 
 use crate::client::Service;
 use crate::did_doc::DidDocument;

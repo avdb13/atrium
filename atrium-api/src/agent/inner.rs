@@ -1,3 +1,4 @@
+pub use super::store::Store;
 use super::Session;
 use crate::did_doc::DidDocument;
 use crate::types::string::Did;
@@ -136,6 +137,13 @@ where
     pub async fn get_proxy_header(&self) -> Option<String> {
         self.inner.atproto_proxy_header().await
     }
+}
+
+impl<S, T> Client<S, T>
+where
+    S: SimpleStore<(), Session> + Send + Sync,
+    T: XrpcClient + Send + Sync,
+{
     // Internal helper to refresh sessions
     // - Wraps the actual implementation to ensure only one refresh is attempted at a time.
     async fn refresh_session(&self) {
@@ -147,20 +155,40 @@ where
             }
             *is_refreshing = true;
         }
+
         // TODO: Ensure `is_refreshing` is reliably set to false even in the event of unexpected errors within `refresh_session_inner()`.
-        self.refresh_session_inner().await;
-        *self.is_refreshing.lock().await = false;
-        self.notify.notify_waiters();
-    }
-    async fn refresh_session_inner(&self) {
-        if let Ok(output) = self.call_refresh_session().await {
-            if let Some(mut session) = self.store.get_session().await {
+        let this = &self;
+
+        // same as `crate::client::com::atproto::server::Service::refresh_session()`
+        let result = async move {
+            let this = &this;
+
+            let response = this
+                .inner
+                .send_xrpc::<(), (), Session, crate::com::atproto::server::refresh_session::Error>(
+                    &XrpcRequest {
+                        method: Method::POST,
+                        nsid: crate::com::atproto::server::refresh_session::NSID.into(),
+                        parameters: None,
+                        input: None,
+                        encoding: None,
+                    },
+                )
+                .await?;
+            match response {
+                OutputDataOrBytes::Data(data) => Ok(data),
+                _ => Err(Error::UnexpectedResponseType),
+            }
+        };
+
+        if let Ok(output) = result.await {
+            if let Some(mut session) = this.store.get_session().await {
                 session.access_jwt = output.data.access_jwt;
                 session.did = output.data.did;
                 session.did_doc = output.data.did_doc.clone();
                 session.handle = output.data.handle;
                 session.refresh_jwt = output.data.refresh_jwt;
-                self.store.set_session(session).await;
+                this.store.set_session(session).await;
             }
             if let Some(did_doc) = output
                 .data
@@ -168,34 +196,17 @@ where
                 .as_ref()
                 .and_then(|value| DidDocument::try_from_unknown(value.clone()).ok())
             {
-                self.store.update_endpoint(&did_doc);
+                this.store.update_endpoint(&did_doc);
             }
         } else {
-            self.store.clear_session().await;
+            this.store.clear_session().await;
         }
+
+        *self.is_refreshing.lock().await = false;
+
+        self.notify.notify_waiters();
     }
-    // same as `crate::client::com::atproto::server::Service::refresh_session()`
-    async fn call_refresh_session(
-        &self,
-    ) -> Result<
-        crate::com::atproto::server::refresh_session::Output,
-        crate::com::atproto::server::refresh_session::Error,
-    > {
-        let response = self
-            .inner
-            .send_xrpc::<(), (), _, _>(&XrpcRequest {
-                method: Method::POST,
-                nsid: crate::com::atproto::server::refresh_session::NSID.into(),
-                parameters: None,
-                input: None,
-                encoding: None,
-            })
-            .await?;
-        match response {
-            OutputDataOrBytes::Data(data) => Ok(data),
-            _ => Err(Error::UnexpectedResponseType),
-        }
-    }
+
     fn is_expired<O, E>(result: &Result<OutputDataOrBytes<O>, E>) -> bool
     where
         O: DeserializeOwned + Send + Sync,
@@ -267,37 +278,5 @@ where
         } else {
             result
         }
-    }
-}
-
-pub struct Store<S>
-{
-    inner: S,
-    endpoint: RwLock<String>,
-}
-
-impl<S> Store<S>
-where
-    S: SimpleStore<(), Session>,
-{
-    pub fn new(inner: S, initial_endpoint: String) -> Self {
-        Self { inner, endpoint: RwLock::new(initial_endpoint) }
-    }
-    pub fn get_endpoint(&self) -> String {
-        self.endpoint.read().expect("failed to read endpoint").clone()
-    }
-    pub fn update_endpoint(&self, did_doc: &DidDocument) {
-        if let Some(endpoint) = did_doc.get_pds_endpoint() {
-            *self.endpoint.write().expect("failed to write endpoint") = endpoint;
-        }
-    }
-    pub async fn get_session(&self) -> Option<Session> {
-        self.inner.get(&()).await.expect("todo")
-    }
-    pub async fn set_session(&self, session: Session) {
-        self.inner.set((), session).await.expect("todo")
-    }
-    pub async fn clear_session(&self) {
-        self.inner.del(&()).await.expect("todo")
     }
 }
