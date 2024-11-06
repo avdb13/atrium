@@ -21,39 +21,39 @@ pub struct CachedResolverConfig {
     pub time_to_live: Option<Duration>,
 }
 
-pub struct CachedResolver<R, E>
+pub struct CachedResolver<R>
 where
-    R: Resolver<E>,
+    R: Resolver,
     R::Input: Sized,
-    E: Error,
 {
     resolver: R,
     cache: CacheImpl<R::Input, R::Output>,
 }
 
-impl<R, E> CachedResolver<R, E>
+impl<R> CachedResolver<R>
 where
-    R: Resolver<E>,
+    R: Resolver,
     R::Input: Sized + Hash + Eq + Send + Sync + 'static,
     R::Output: Clone + Send + Sync + 'static,
-    E: Error + Send + Sync + 'static,
+    R::Error: Error,
 {
     pub fn new(resolver: R, config: CachedResolverConfig) -> Self {
         Self { resolver, cache: CacheImpl::new(config) }
     }
 }
 
-impl<R, E> Resolver<E> for CachedResolver<R, E>
+impl<R> Resolver for CachedResolver<R>
 where
-    R: Resolver<E> + Send + Sync + 'static,
-    R::Input: Clone + Hash + Eq + Send + Sync + 'static + Debug,
+    R: Resolver + Sync,
+    R::Input: Sized + Clone + Hash + Eq + Send + Sync + 'static,
     R::Output: Clone + Send + Sync + 'static,
-    E: Error + Send + Sync + 'static,
+    R::Error: Error,
 {
     type Input = R::Input;
     type Output = R::Output;
+    type Error = R::Error;
 
-    async fn resolve(&self, input: &Self::Input) -> Result<Option<Self::Output>, E> {
+    async fn resolve(&self, input: &Self::Input) -> Result<Option<Self::Output>, Self::Error> {
         if let Some(output) = self.cache.get(input).await {
             return Ok(Some(output));
         }

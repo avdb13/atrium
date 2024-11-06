@@ -10,9 +10,13 @@ use std::{
 use chrono::{DateTime, FixedOffset, Utc};
 use tokio::sync::broadcast;
 
+use crate::resolver::Resolver;
+
 use super::{memory::MemorySimpleStore, SimpleStore};
 
 pub type Getter<'f, T> = Pin<Box<dyn Future<Output = T> + Send + 'f>>;
+
+pub trait SessionResolver<K, V, E>: Resolver<E, Input = K, Output = V> {}
 
 pub trait CachedStore<K, V, E>: SimpleStore<K, Cached<V, E>>
 where

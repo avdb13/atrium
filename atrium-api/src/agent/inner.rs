@@ -1,8 +1,8 @@
-pub use super::store::Store;
 use super::Session;
 use crate::did_doc::DidDocument;
 use crate::types::string::Did;
 use crate::types::TryFromUnknown;
+use atrium_common::resolver::{Resolver, ThrottledResolver};
 use atrium_common::store::SimpleStore;
 use atrium_xrpc::error::{Error, Result, XrpcErrorKind};
 use atrium_xrpc::{HttpClient, OutputDataOrBytes, XrpcClient, XrpcRequest};
@@ -94,7 +94,7 @@ where
 pub struct Client<S, T> {
     store: Arc<Store<S>>,
     inner: WrapperClient<S, T>,
-    is_refreshing: Arc<Mutex<bool>>,
+    is_refreshing: SessionResolver,
     notify: Arc<Notify>,
 }
 
@@ -155,40 +155,20 @@ where
             }
             *is_refreshing = true;
         }
-
         // TODO: Ensure `is_refreshing` is reliably set to false even in the event of unexpected errors within `refresh_session_inner()`.
-        let this = &self;
-
-        // same as `crate::client::com::atproto::server::Service::refresh_session()`
-        let result = async move {
-            let this = &this;
-
-            let response = this
-                .inner
-                .send_xrpc::<(), (), Session, crate::com::atproto::server::refresh_session::Error>(
-                    &XrpcRequest {
-                        method: Method::POST,
-                        nsid: crate::com::atproto::server::refresh_session::NSID.into(),
-                        parameters: None,
-                        input: None,
-                        encoding: None,
-                    },
-                )
-                .await?;
-            match response {
-                OutputDataOrBytes::Data(data) => Ok(data),
-                _ => Err(Error::UnexpectedResponseType),
-            }
-        };
-
-        if let Ok(output) = result.await {
-            if let Some(mut session) = this.store.get_session().await {
+        self.refresh_session_inner().await;
+        *self.is_refreshing.lock().await = false;
+        self.notify.notify_waiters();
+    }
+    async fn refresh_session_inner(&self) {
+        if let Ok(output) = self.call_refresh_session().await {
+            if let Some(mut session) = self.store.get_session().await {
                 session.access_jwt = output.data.access_jwt;
                 session.did = output.data.did;
                 session.did_doc = output.data.did_doc.clone();
                 session.handle = output.data.handle;
                 session.refresh_jwt = output.data.refresh_jwt;
-                this.store.set_session(session).await;
+                self.store.set_session(session).await;
             }
             if let Some(did_doc) = output
                 .data
@@ -196,17 +176,34 @@ where
                 .as_ref()
                 .and_then(|value| DidDocument::try_from_unknown(value.clone()).ok())
             {
-                this.store.update_endpoint(&did_doc);
+                self.store.update_endpoint(&did_doc);
             }
         } else {
-            this.store.clear_session().await;
+            self.store.clear_session().await;
         }
-
-        *self.is_refreshing.lock().await = false;
-
-        self.notify.notify_waiters();
     }
-
+    // same as `crate::client::com::atproto::server::Service::refresh_session()`
+    async fn call_refresh_session(
+        &self,
+    ) -> Result<
+        crate::com::atproto::server::refresh_session::Output,
+        crate::com::atproto::server::refresh_session::Error,
+    > {
+        let response = self
+            .inner
+            .send_xrpc::<(), (), _, _>(&XrpcRequest {
+                method: Method::POST,
+                nsid: crate::com::atproto::server::refresh_session::NSID.into(),
+                parameters: None,
+                input: None,
+                encoding: None,
+            })
+            .await?;
+        match response {
+            OutputDataOrBytes::Data(data) => Ok(data),
+            _ => Err(Error::UnexpectedResponseType),
+        }
+    }
     fn is_expired<O, E>(result: &Result<OutputDataOrBytes<O>, E>) -> bool
     where
         O: DeserializeOwned + Send + Sync,
@@ -278,5 +275,25 @@ where
         } else {
             result
         }
+    }
+}
+
+pub struct Store<S>(S);
+
+impl<S> Store<S>
+where
+    S: Resolver<Error, Input = (), Output = Session>,
+{
+    // pub fn new(inner: S, initial_endpoint: String) -> Self {
+    //     Self { inner, endpoint: RwLock::new(initial_endpoint) }
+    // }
+    pub async fn get_session(&self) -> Option<Session> {
+        self.0.get(&()).await.expect("todo")
+    }
+    pub async fn set_session(&self, session: Session) {
+        self.0.set((), session).await.expect("todo")
+    }
+    pub async fn clear_session(&self) {
+        self.0.del(&()).await.expect("todo")
     }
 }

@@ -10,58 +10,55 @@ use std::future::Future;
 use std::hash::Hash;
 
 #[cfg_attr(not(target_arch = "wasm32"), trait_variant::make(Send))]
-pub trait Resolver<E>
-where
-    E: std::error::Error,
-{
+pub trait Resolver {
     type Input: ?Sized;
     type Output;
+    type Error;
 
     fn resolve(
         &self,
         input: &Self::Input,
-    ) -> impl Future<Output = std::result::Result<Option<Self::Output>, E>>;
+    ) -> impl Future<Output = std::result::Result<Option<Self::Output>, Self::Error>>;
 }
 
-pub trait Cacheable<E>
+pub trait Cacheable
 where
-    Self: Sized + Resolver<E>,
+    Self: Sized + Resolver,
     Self::Input: Sized,
-    E: std::error::Error,
+    Self::Error: std::error::Error,
 {
-    fn cached(self, config: CachedResolverConfig) -> CachedResolver<Self, E>;
+    fn cached(self, config: CachedResolverConfig) -> CachedResolver<Self>;
 }
 
-impl<R, E> Cacheable<E> for R
+impl<R> Cacheable for R
 where
-    R: Sized + Resolver<E>,
+    R: Sized + Resolver,
     R::Input: Sized + Hash + Eq + Send + Sync + 'static,
     R::Output: Clone + Send + Sync + 'static,
-    E: std::error::Error + Send + Sync + 'static,
+    R::Error: std::error::Error + Send + Sync + 'static,
 {
-    fn cached(self, config: CachedResolverConfig) -> CachedResolver<Self, E> {
+    fn cached(self, config: CachedResolverConfig) -> CachedResolver<Self> {
         CachedResolver::new(self, config)
     }
 }
 
-pub trait Throttleable<E>
+pub trait Throttleable
 where
-    Self: Sized + Resolver<E>,
+    Self: Sized + Resolver,
     Self::Input: Sized,
-    E: std::error::Error,
 {
-    fn throttled(self) -> ThrottledResolver<Self, E>;
+    fn throttled(self) -> ThrottledResolver<Self, Self::Error>;
 }
 
-impl<R, E> Throttleable<E> for R
+impl<R> Throttleable for R
 where
-    R: Sized + Resolver<E>,
+    R: Resolver,
     R::Input: Clone + Hash + Eq + Send + Sync + 'static,
     R::Output: Clone + Send + Sync + 'static,
-    E: std::error::Error + Send + Sync + 'static,
+    R::Error: std::error::Error + Send + Sync + 'static,
 {
-    fn throttled(self) -> ThrottledResolver<Self, E> {
-        ThrottledResolver::new(self)
+    fn throttled(self) -> ThrottledResolver<Self, Self::Error> {
+        ThrottledResolver::new(self, Default::default())
     }
 }
 
@@ -90,9 +87,10 @@ mod tests {
         counts: Arc<RwLock<HashMap<String, usize>>>,
     }
 
-    impl Resolver<Error> for MockResolver {
+    impl Resolver for MockResolver {
         type Input = String;
         type Output = String;
+        type Error = Error;
 
         async fn resolve(&self, input: &Self::Input) -> Result<Option<Self::Output>> {
             sleep(Duration::from_millis(10)).await;

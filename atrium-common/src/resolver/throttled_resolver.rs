@@ -1,5 +1,6 @@
+use crate::store::SimpleStore;
+
 use super::Resolver;
-use dashmap::{DashMap, Entry};
 use std::error::Error;
 use std::hash::Hash;
 use std::sync::Arc;
@@ -8,52 +9,44 @@ use tokio::sync::Mutex;
 
 type SharedSender<T> = Arc<Mutex<Sender<Option<T>>>>;
 
-pub struct ThrottledResolver<R, E>
-where
-    R: Resolver<E>,
-    R::Input: Sized,
-    E: Error,
-{
+pub struct ThrottledResolver<R, S> {
     resolver: R,
-    senders: Arc<DashMap<R::Input, SharedSender<R::Output>>>,
+    senders: Arc<S>,
 }
 
-impl<R, E> ThrottledResolver<R, E>
-where
-    R: Resolver<E>,
-    R::Input: Clone + Hash + Eq + Send + Sync + 'static,
-    E: Error + Send + Sync + 'static,
-{
-    pub fn new(resolver: R) -> Self {
-        Self { resolver, senders: Arc::new(DashMap::new()) }
+impl<R, S> ThrottledResolver<R, S> {
+    pub fn new(resolver: R, senders: S) -> Self {
+        Self { resolver, senders: Arc::new(senders) }
     }
 }
 
-impl<R, E> Resolver<E> for ThrottledResolver<R, E>
+impl<R, S> Resolver for ThrottledResolver<R, S>
 where
-    R: Resolver<E> + Send + Sync + 'static,
-    R::Input: Clone + Hash + Eq + Send + Sync + 'static,
-    R::Output: Clone + Send + Sync + 'static,
-    E: Error + Send + Sync + 'static,
+    R: Resolver + Send + Sync,
+    R::Input: Clone + Hash + Eq + Send + Sync,
+    R::Output: Clone + Send + Sync,
+    R::Error: Error + Send + Sync,
+    S: SimpleStore<R::Input, SharedSender<R::Output>> + Sync,
 {
     type Input = R::Input;
     type Output = R::Output;
+    type Error = R::Error;
 
-    async fn resolve(&self, input: &Self::Input) -> Result<Option<Self::Output>, E> {
-        match self.senders.entry(input.clone()) {
-            Entry::Occupied(occupied) => {
-                let tx = occupied.get().lock().await.clone();
+    async fn resolve(&self, input: &Self::Input) -> Result<Option<Self::Output>, Self::Error> {
+        match self.senders.get(input).await? {
+            Some(occupied) => {
+                let tx = occupied.lock().await.clone();
                 drop(occupied);
                 Ok(tx.subscribe().recv().await.expect("recv"))
             }
-            Entry::Vacant(vacant) => {
+            None => {
                 let (tx, _) = channel(1);
-                vacant.insert(Arc::new(Mutex::new(tx.clone())));
+                self.senders.set(input.clone(), Arc::new(Mutex::new(tx.clone())));
                 let Some(result) = self.resolver.resolve(input).await.transpose() else {
                     return Ok(None);
                 };
                 tx.send(result.as_ref().ok().cloned()).ok();
-                self.senders.remove(input);
+                self.senders.del(input);
                 result.map(Some)
             }
         }
