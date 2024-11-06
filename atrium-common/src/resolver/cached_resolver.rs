@@ -15,12 +15,6 @@ pub(crate) trait Cache {
     async fn set(&self, key: Self::Input, value: Self::Output);
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct CachedResolverConfig {
-    pub max_capacity: Option<u64>,
-    pub time_to_live: Option<Duration>,
-}
-
 pub struct CachedResolver<R>
 where
     R: Resolver,
