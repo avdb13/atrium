@@ -1,8 +1,9 @@
 use super::{CellStore, MapStore};
 use std::collections::HashMap;
+use std::convert::Infallible;
 use std::fmt::Debug;
 use std::hash::Hash;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -24,17 +25,31 @@ impl<V> CellStore<V> for MemoryCellStore<V>
 where
     V: Debug + Clone + Send + Sync + 'static,
 {
-    type Error = Error;
+    type Error = Infallible;
 
     async fn get(&self) -> Result<Option<V>, Self::Error> {
-        Ok(self.store.lock().unwrap().as_ref().cloned())
+        match self.store.lock().map_err(PoisonError::into_inner) {
+            Ok(guard) => Ok(&*guard).cloned(),
+            Err(mut value) => {
+                let _ = value.take();
+                Ok(None)
+            }
+        }
     }
     async fn set(&self, value: V) -> Result<(), Self::Error> {
-        let _ = self.store.lock().unwrap().insert(value);
+        let mut guard = match self.store.lock().map_err(PoisonError::into_inner) {
+            Ok(guard) => guard,
+            Err(guard) => guard,
+        };
+        let _ = guard.replace(value);
         Ok(())
     }
     async fn clear(&self) -> Result<(), Self::Error> {
-        self.store.lock().unwrap().take();
+        let mut guard = match self.store.lock().map_err(PoisonError::into_inner) {
+            Ok(guard) => guard,
+            Err(guard) => guard,
+        };
+        let _ = guard.take();
         Ok(())
     }
 }

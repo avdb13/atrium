@@ -13,7 +13,7 @@ pub trait AtpSessionStore: CellStore<AtpSession> {
 
 impl<T> AtpSessionStore for T
 where
-    T: CellStore<AtpSession> + Send + Sync,
+    T: CellStore<AtpSession> + Clone + Send + Sync,
 {
     async fn get_session(&self) -> Option<AtpSession> {
         self.get().await.expect("Infallible")

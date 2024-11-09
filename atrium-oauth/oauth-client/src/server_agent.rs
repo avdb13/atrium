@@ -4,8 +4,9 @@ use crate::jose::jwt::{RegisteredClaims, RegisteredClaimsAud};
 use crate::keyset::Keyset;
 use crate::resolver::OAuthResolver;
 use crate::types::{
-    OAuthAuthorizationServerMetadata, OAuthClientMetadata, OAuthTokenResponse,
-    PushedAuthorizationRequestParameters, TokenGrantType, TokenRequestParameters, TokenSet,
+    AuthorizationCodeParameters, OAuthAuthorizationServerMetadata, OAuthClientMetadata,
+    OAuthTokenResponse, PushedAuthorizationRequestParameters, RefreshTokenParameters,
+    RevocationRequestParameters, TokenRequestParameters, TokenSet,
 };
 use crate::utils::{compare_algos, generate_nonce};
 use atrium_api::types::string::Datetime;
@@ -46,6 +47,8 @@ pub enum Error {
     #[error(transparent)]
     Keyset(#[from] crate::keyset::Error),
     #[error(transparent)]
+    Session(#[from] crate::oauth_session::Error),
+    #[error(transparent)]
     SerdeHtmlForm(#[from] serde_html_form::ser::Error),
     #[error(transparent)]
     SerdeJson(#[from] serde_json::Error),
@@ -56,7 +59,7 @@ pub type Result<T> = core::result::Result<T, Error>;
 #[allow(dead_code)]
 pub enum OAuthRequest {
     Token(TokenRequestParameters),
-    Revocation,
+    Revocation(RevocationRequestParameters),
     Introspection,
     PushedAuthorizationRequest(PushedAuthorizationRequestParameters),
 }
@@ -65,14 +68,14 @@ impl OAuthRequest {
     fn name(&self) -> String {
         String::from(match self {
             Self::Token(_) => "token",
-            Self::Revocation => "revocation",
+            Self::Revocation(_) => "revocation",
             Self::Introspection => "introspection",
             Self::PushedAuthorizationRequest(_) => "pushed_authorization_request",
         })
     }
     fn expected_status(&self) -> StatusCode {
         match self {
-            Self::Token(_) => StatusCode::OK,
+            Self::Token(_) | Self::Revocation(_) => StatusCode::OK,
             Self::PushedAuthorizationRequest(_) => StatusCode::CREATED,
             _ => unimplemented!(),
         }
@@ -162,12 +165,45 @@ where
     }
     pub async fn exchange_code(&self, code: &str, verifier: &str) -> Result<TokenSet> {
         self.verify_token_response(
-            self.request(OAuthRequest::Token(TokenRequestParameters {
-                grant_type: TokenGrantType::AuthorizationCode,
-                code: code.into(),
-                redirect_uri: self.client_metadata.redirect_uris[0].clone(), // ?
-                code_verifier: verifier.into(),
-            }))
+            self.request(OAuthRequest::Token(TokenRequestParameters::AuthorizationCode(
+                AuthorizationCodeParameters {
+                    code: code.into(),
+                    redirect_uri: self.client_metadata.redirect_uris[0].clone(), // ?
+                    code_verifier: verifier.into(),
+                },
+            )))
+            .await?,
+        )
+        .await
+    }
+    pub async fn revoke_session(&self, token: &str) -> Result<()> {
+        let request =
+            OAuthRequest::Revocation(RevocationRequestParameters { token: token.to_owned() });
+        self.request(request).await
+    }
+    pub async fn refresh_session(&self, token_set: TokenSet) -> Result<TokenSet> {
+        let TokenSet { sub, scope, refresh_token, access_token, token_type, expires_at, .. } =
+            token_set;
+        let expires_in = expires_at.map(|expires_at| {
+            expires_at.as_ref().signed_duration_since(Datetime::now().as_ref()).num_seconds()
+        });
+        let token_response = OAuthTokenResponse {
+            access_token,
+            token_type,
+            expires_in,
+            refresh_token,
+            scope,
+            sub: Some(sub),
+        };
+        let TokenSet { scope, refresh_token: Some(refresh_token), .. } =
+            self.verify_token_response(token_response).await?
+        else {
+            todo!();
+        };
+        self.verify_token_response(
+            self.request(OAuthRequest::Token(TokenRequestParameters::RefreshToken(
+                RefreshTokenParameters { refresh_token, scope },
+            )))
             .await?,
         )
         .await
@@ -267,7 +303,7 @@ where
     fn endpoint(&self, request: &OAuthRequest) -> Option<&String> {
         match request {
             OAuthRequest::Token(_) => Some(&self.server_metadata.token_endpoint),
-            OAuthRequest::Revocation => self.server_metadata.revocation_endpoint.as_ref(),
+            OAuthRequest::Revocation(_) => self.server_metadata.revocation_endpoint.as_ref(),
             OAuthRequest::Introspection => self.server_metadata.introspection_endpoint.as_ref(),
             OAuthRequest::PushedAuthorizationRequest(_) => {
                 self.server_metadata.pushed_authorization_request_endpoint.as_ref()
@@ -275,3 +311,15 @@ where
         }
     }
 }
+
+// #[cfg(feature = "default-client")]
+// impl<D, H> OAuthAgent<D, H, crate::http_client::default::DefaultHttpClient> {
+//     pub fn new(
+//         resolver: Arc<OAuthResolver<crate::http_client::default::DefaultHttpClient, D, H>>,
+//         client_metadata: OAuthClientMetadata,
+//         keyset: Option<Keyset>,
+//     ) -> Self {
+//         let http_client = Arc::new(crate::http_client::default::DefaultHttpClient::default());
+//         Self { client_metadata, resolver, http_client, keyset }
+//     }
+// }

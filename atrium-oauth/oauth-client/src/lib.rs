@@ -5,6 +5,7 @@ mod http_client;
 mod jose;
 mod keyset;
 mod oauth_client;
+mod oauth_session;
 mod resolver;
 mod server_agent;
 pub mod store;

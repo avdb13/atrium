@@ -1,6 +1,6 @@
 //! Implementation of [`AtpAgent`] and definitions of [`SessionStore`] for it.
 
-mod inner;
+pub mod inner;
 pub mod store;
 
 use self::store::AtpSessionStore;

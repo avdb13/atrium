@@ -1,13 +1,15 @@
-use super::{AtpSession, AtpSessionStore};
+use super::AtpSessionStore;
 use crate::did_doc::DidDocument;
 use crate::types::string::Did;
 use crate::types::TryFromUnknown;
-use atrium_common::store::CellStore;
+use atrium_common::store::{CellStore, MapStore};
 use atrium_xrpc::error::{Error, Result, XrpcErrorKind};
 use atrium_xrpc::{HttpClient, OutputDataOrBytes, XrpcClient, XrpcRequest};
 use http::{Method, Request, Response};
 use serde::{de::DeserializeOwned, Serialize};
+use std::convert::Infallible;
 use std::fmt::Debug;
+use std::hash::Hash;
 use std::sync::{Arc, RwLock};
 use tokio::sync::{Mutex, Notify};
 
@@ -270,12 +272,18 @@ where
     }
 }
 
-pub struct Store<S> {
+pub struct Store<S>
+where
+    S: Clone,
+{
     inner: S,
     endpoint: RwLock<String>,
 }
 
-impl<S> Store<S> {
+impl<S> Store<S>
+where
+    S: Clone,
+{
     pub fn new(inner: S, initial_endpoint: String) -> Self {
         Self { inner, endpoint: RwLock::new(initial_endpoint) }
     }
@@ -289,18 +297,45 @@ impl<S> Store<S> {
     }
 }
 
-impl<S> CellStore<AtpSession> for Store<S>
+impl<S, V> CellStore<V> for Store<S>
 where
-    S: CellStore<AtpSession> + Send + Sync,
+    V: Clone + Send + Sync,
+    S: CellStore<V> + Clone + Send + Sync,
 {
-    type Error = std::convert::Infallible;
+    type Error = Infallible;
 
-    async fn get(&self) -> core::result::Result<Option<AtpSession>, Self::Error> {
+    async fn get(&self) -> core::result::Result<Option<V>, Self::Error> {
         let value = self.inner.get().await.unwrap();
         Ok(value)
     }
-    async fn set(&self, value: AtpSession) -> core::result::Result<(), Self::Error> {
+    async fn set(&self, value: V) -> core::result::Result<(), Self::Error> {
         self.inner.set(value).await.unwrap();
+        Ok(())
+    }
+    async fn clear(&self) -> core::result::Result<(), Self::Error> {
+        self.inner.clear().await.unwrap();
+        Ok(())
+    }
+}
+
+impl<S, K, V> MapStore<K, V> for Store<S>
+where
+    K: Eq + Hash + Send + Sync,
+    V: Clone + Send + Sync,
+    S: MapStore<K, V> + Clone + Send + Sync,
+{
+    type Error = Infallible;
+
+    async fn get(&self, key: &K) -> core::result::Result<Option<V>, Self::Error> {
+        let value = self.inner.get(key).await.unwrap();
+        Ok(value)
+    }
+    async fn set(&self, key: K, value: V) -> core::result::Result<(), Self::Error> {
+        self.inner.set(key, value).await.unwrap();
+        Ok(())
+    }
+    async fn del(&self, key: &K) -> core::result::Result<(), Self::Error> {
+        self.inner.del(key).await.unwrap();
         Ok(())
     }
     async fn clear(&self) -> core::result::Result<(), Self::Error> {
