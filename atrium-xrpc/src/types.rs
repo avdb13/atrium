@@ -4,6 +4,21 @@ use serde::{de::DeserializeOwned, Serialize};
 
 pub(crate) const NSID_REFRESH_SESSION: &str = "com.atproto.server.refreshSession";
 
+/// Supported token types which can be used for authentication.
+pub enum JwtTokenType {
+    Bearer,
+    DPoP,
+}
+
+impl std::fmt::Display for JwtTokenType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            JwtTokenType::Bearer => "Bearer",
+            JwtTokenType::DPoP => "DPoP",
+        })
+    }
+}
+
 /// HTTP headers which can be used in XPRC requests.
 pub enum Header {
     ContentType,
